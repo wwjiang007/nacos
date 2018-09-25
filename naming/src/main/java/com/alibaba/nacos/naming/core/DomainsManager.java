@@ -196,10 +196,10 @@ public class DomainsManager {
             if (pair == null) {
                 continue;
             }
-            Boolean valid = Boolean.parseBoolean(pair.getValue0());
+            Boolean valid = Boolean.parseBoolean(pair.getKey());
             if (valid != ipAddress.isValid()) {
-                ipAddress.setValid(Boolean.parseBoolean(pair.getValue0()));
-                ipAddress.setInvalidType(pair.getValue1());
+                ipAddress.setValid(Boolean.parseBoolean(pair.getKey()));
+                ipAddress.setInvalidType(pair.getValue());
                 Loggers.EVT_LOG.info("{" + domName + "} {SYNC} " +
                         "{IP-" + (ipAddress.isValid() ? "ENABLED" : "DISABLED") + "} " + ipAddress.getIp()
                         + ":" + ipAddress.getPort() + "@" + ipAddress.getClusterName());
@@ -219,6 +219,10 @@ public class DomainsManager {
 
     public Set<String> getAllDomNames() {
         return new HashSet<String>(chooseDomMap().keySet());
+    }
+
+    public List<String> getAllDomNamesList() {
+        return new ArrayList<>(chooseDomMap().keySet());
     }
 
     public void setAllDomNames(List<String> allDomNames) {
