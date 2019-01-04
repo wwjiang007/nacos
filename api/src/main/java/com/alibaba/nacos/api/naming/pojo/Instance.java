@@ -22,7 +22,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * @author dungu.zpf
+ * @author <a href="mailto:zpf.073@gmail.com">nkorange</a>
  */
 public class Instance {
 
@@ -52,22 +52,22 @@ public class Instance {
     @JSONField(name = "valid")
     private boolean healthy = true;
 
+    private boolean enabled = true;
+
     /**
      * Cluster information of instance
      */
-    @JSONField(serialize = false)
-    private Cluster cluster = new Cluster();
+    private String clusterName;
 
     /**
-     * Service information of instance
+     * Service name of instance
      */
-    @JSONField(serialize = false)
-    private Service service;
+    private String serviceName;
 
     /**
      * User extended attributes
      */
-    private Map<String, String> metadata = new HashMap<>();
+    private Map<String, String> metadata = new HashMap<String, String>();
 
     public String getInstanceId() {
         return instanceId;
@@ -109,20 +109,20 @@ public class Instance {
         this.healthy = healthy;
     }
 
-    public Cluster getCluster() {
-        return cluster;
+    public String getClusterName() {
+        return clusterName;
     }
 
-    public void setCluster(Cluster cluster) {
-        this.cluster = cluster;
+    public void setClusterName(String clusterName) {
+        this.clusterName = clusterName;
     }
 
-    public Service getService() {
-        return service;
+    public String getServiceName() {
+        return serviceName;
     }
 
-    public void setService(Service service) {
-        this.service = service;
+    public void setServiceName(String serviceName) {
+        this.serviceName = serviceName;
     }
 
     public Map<String, String> getMetadata() {
@@ -135,6 +135,14 @@ public class Instance {
 
     public void addMetadata(String key, String value) {
         this.metadata.put(key, value);
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 
     @Override
@@ -152,7 +160,7 @@ public class Instance {
             return false;
         }
 
-        Instance host = (Instance) obj;
+        Instance host = (Instance)obj;
 
         return strEquals(toString(), host.toString());
     }
@@ -165,5 +173,5 @@ public class Instance {
     private static boolean strEquals(String str1, String str2) {
         return str1 == null ? str2 == null : str1.equals(str2);
     }
-    
+
 }
