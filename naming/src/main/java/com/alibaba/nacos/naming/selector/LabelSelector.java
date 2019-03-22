@@ -17,16 +17,18 @@ package com.alibaba.nacos.naming.selector;
 
 
 import com.alibaba.nacos.api.cmdb.pojo.PreservedEntityTypes;
-import com.alibaba.nacos.api.selector.SelectorType;
 import com.alibaba.nacos.api.selector.ExpressionSelector;
+import com.alibaba.nacos.api.selector.SelectorType;
 import com.alibaba.nacos.cmdb.service.CmdbReader;
 import com.alibaba.nacos.naming.boot.SpringContext;
-import com.alibaba.nacos.naming.core.IpAddress;
+import com.alibaba.nacos.naming.core.Instance;
 import com.alibaba.nacos.naming.exception.NacosException;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.context.ApplicationContext;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * A selector to implement a so called same-label-prior rule for service discovery.
@@ -49,12 +51,11 @@ import java.util.*;
  * to the consumer. Note that this fallback strategy may also be abstracted in future to introduce
  * more kinds of behaviors.
  *
- * @author <a href="mailto:zpf.073@gmail.com">nkorange</a>
+ * @author nkorange
  * @see CmdbReader
+ * @since 0.7.0
  */
 public class LabelSelector extends ExpressionSelector implements Selector {
-
-    private CmdbReader cmdbReader;
 
     /**
      * The labels relevant to this the selector.
@@ -90,10 +91,11 @@ public class LabelSelector extends ExpressionSelector implements Selector {
 
     public LabelSelector() {
         setType(SelectorType.label.name());
-        ApplicationContext context = SpringContext.getAppContext();
-        cmdbReader = context.getBean(CmdbReader.class);
     }
 
+    private CmdbReader getCmdbReader() {
+        return SpringContext.getAppContext().getBean(CmdbReader.class);
+    }
 
     public static Set<String> parseExpression(String expression) throws NacosException {
         return ExpressionInterpreter.parseExpression(expression);
@@ -101,37 +103,37 @@ public class LabelSelector extends ExpressionSelector implements Selector {
 
 
     @Override
-    public List<IpAddress> select(String consumer, List<IpAddress> providers) {
+    public List<Instance> select(String consumer, List<Instance> providers) {
 
         if (labels.isEmpty()) {
             return providers;
         }
 
-        List<IpAddress> ipAddressList = new ArrayList<>();
-        for (IpAddress ipAddress : providers) {
+        List<Instance> instanceList = new ArrayList<>();
+        for (Instance instance : providers) {
 
             boolean matched = true;
             for (String labelName : getLabels()) {
 
-                String consumerLabelValue = cmdbReader.queryLabel(consumer, PreservedEntityTypes.ip.name(), labelName);
+                String consumerLabelValue = getCmdbReader().queryLabel(consumer, PreservedEntityTypes.ip.name(), labelName);
 
                 if (StringUtils.isNotBlank(consumerLabelValue) &&
                         !StringUtils.equals(consumerLabelValue,
-                                cmdbReader.queryLabel(ipAddress.getIp(), PreservedEntityTypes.ip.name(), labelName))) {
+                            getCmdbReader().queryLabel(instance.getIp(), PreservedEntityTypes.ip.name(), labelName))) {
                     matched = false;
                     break;
                 }
             }
             if (matched) {
-                ipAddressList.add(ipAddress);
+                instanceList.add(instance);
             }
         }
 
-        if (ipAddressList.isEmpty()) {
+        if (instanceList.isEmpty()) {
             return providers;
         }
 
-        return ipAddressList;
+        return instanceList;
     }
 
     /**

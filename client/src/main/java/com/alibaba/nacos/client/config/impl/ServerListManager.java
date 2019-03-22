@@ -15,30 +15,21 @@
  */
 package com.alibaba.nacos.client.config.impl;
 
-import java.io.IOException;
-import java.io.StringReader;
-import java.net.HttpURLConnection;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Properties;
-import java.util.Random;
-import java.util.concurrent.TimeUnit;
-
 import com.alibaba.nacos.api.PropertyKeyConst;
 import com.alibaba.nacos.api.exception.NacosException;
 import com.alibaba.nacos.client.config.impl.EventDispatcher.ServerlistChangeEvent;
 import com.alibaba.nacos.client.config.impl.HttpSimpleClient.HttpResult;
 import com.alibaba.nacos.client.config.utils.IOUtils;
-import com.alibaba.nacos.client.config.utils.LogUtils;
-import com.alibaba.nacos.client.logger.Logger;
-import com.alibaba.nacos.client.logger.support.LoggerHelper;
-import com.alibaba.nacos.client.utils.EnvUtil;
-import com.alibaba.nacos.client.utils.ParamUtil;
-import com.alibaba.nacos.client.utils.StringUtils;
-
+import com.alibaba.nacos.client.utils.*;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import org.slf4j.Logger;
+
+import java.io.IOException;
+import java.io.StringReader;
+import java.net.HttpURLConnection;
+import java.util.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Serverlist Manager
@@ -47,7 +38,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
  */
 public class ServerListManager {
 
-    final static public Logger log = LogUtils.logger(ServerListManager.class);
+    private static final Logger LOGGER = LogUtils.logger(ServerListManager.class);
 
     public ServerListManager() {
         isFixed = false;
@@ -95,6 +86,8 @@ public class ServerListManager {
     public ServerListManager(String endpoint, String namespace) throws NacosException {
         isFixed = false;
         isStarted = false;
+        endpoint = initEndpoint(endpoint);
+
         if (StringUtils.isBlank(endpoint)) {
             throw new NacosException(NacosException.CLIENT_INVALID_PARAM, "endpoint is blank");
         }
@@ -160,10 +153,8 @@ public class ServerListManager {
     }
 
     private void initParam(Properties properties) {
-        String endpointTmp = properties.getProperty(PropertyKeyConst.ENDPOINT);
-        if (!StringUtils.isBlank(endpointTmp)) {
-            endpoint = endpointTmp;
-        }
+        endpoint = initEndpoint(properties.getProperty(PropertyKeyConst.ENDPOINT));
+
         String contentPathTmp = properties.getProperty(PropertyKeyConst.CONTEXT_PATH);
         if (!StringUtils.isBlank(contentPathTmp)) {
             contentPath = contentPathTmp;
@@ -172,6 +163,21 @@ public class ServerListManager {
         if (!StringUtils.isBlank(serverListNameTmp)) {
             serverListName = serverListNameTmp;
         }
+    }
+
+    private String initEndpoint(String endpointTmp) {
+        String endpointPortTmp = System.getenv(PropertyKeyConst.SystemEnv.ALIBABA_ALIWARE_ENDPOINT_PORT);
+        if (StringUtils.isNotBlank(endpointPortTmp)) {
+            endpointPort = Integer.parseInt(endpointPortTmp);
+        }
+
+        return TemplateUtils.stringBlankAndThenExecute(endpointTmp, new Callable<String>() {
+            @Override
+            public String call() {
+                String endpointUrl = System.getenv(PropertyKeyConst.SystemEnv.ALIBABA_ALIWARE_ENDPOINT_URL);
+                return StringUtils.isNotBlank(endpointUrl) ? endpointUrl : "";
+            }
+        });
     }
 
     public synchronized void start() throws NacosException {
@@ -186,14 +192,13 @@ public class ServerListManager {
             try {
                 this.wait((i + 1) * 100L);
             } catch (Exception e) {
-                log.warn("get serverlist fail,url: " + addressServerUrl);
+                LOGGER.warn("get serverlist fail,url: {}", addressServerUrl);
             }
         }
 
         if (serverUrls.isEmpty()) {
-            log.error("NACOS-0008", LoggerHelper.getErrorCodeStr("NACOS", "NACOS-0008", "环境问题",
-                "fail to get NACOS-server serverlist! env:" + name + ", not connnect url:" + addressServerUrl));
-            log.error(name, "NACOS-XXXX", "[init-serverlist] fail to get NACOS-server serverlist!");
+            LOGGER.error("[init-serverlist] fail to get NACOS-server serverlist! env: {}, url: {}", name,
+                addressServerUrl);
             throw new NacosException(NacosException.SERVER_ERROR,
                 "fail to get NACOS-server serverlist! env:" + name + ", not connnect url:" + addressServerUrl);
         }
@@ -204,7 +209,7 @@ public class ServerListManager {
 
     Iterator<String> iterator() {
         if (serverUrls.isEmpty()) {
-            log.error(name, "NACOS-XXXX", "[iterator-serverlist] No server address defined!");
+            LOGGER.error("[{}] [iterator-serverlist] No server address defined!", name);
         }
         return new ServerAddressIterator(serverUrls);
     }
@@ -224,7 +229,7 @@ public class ServerListManager {
             try {
                 updateIfChanged(getApacheServerList(url, name));
             } catch (Exception e) {
-                log.error(name, "NACOS-XXXX", "[update-serverlist] failed to update serverlist from address server!",
+                LOGGER.error("[" + name + "][update-serverlist] failed to update serverlist from address server!",
                     e);
             }
         }
@@ -232,10 +237,7 @@ public class ServerListManager {
 
     private void updateIfChanged(List<String> newList) {
         if (null == newList || newList.isEmpty()) {
-
-            log.warn("NACOS-0001", LoggerHelper.getErrorCodeStr("NACOS", "NACOS-0001", "环境问题",
-                "[update-serverlist] current serverlist from address server is empty!!!"));
-            log.warn(name, "[update-serverlist] current serverlist from address server is empty!!!");
+            LOGGER.warn("[update-serverlist] current serverlist from address server is empty!!!");
             return;
         }
         /**
@@ -248,7 +250,7 @@ public class ServerListManager {
         currentServerAddr = iterator().next();
 
         EventDispatcher.fireEvent(new ServerlistChangeEvent());
-        log.info(name, "[update-serverlist] serverlist updated to {}", serverUrls);
+        LOGGER.info("[{}] [update-serverlist] serverlist updated to {}", name, serverUrls);
     }
 
     private List<String> getApacheServerList(String url, String name) {
@@ -276,12 +278,12 @@ public class ServerListManager {
                 }
                 return result;
             } else {
-                log.error(addressServerUrl, "NACOS-XXXX", "[check-serverlist] error. code={}", httpResult.code);
+                LOGGER.error("[check-serverlist] error. addressServerUrl: {}, code: {}", addressServerUrl,
+                    httpResult.code);
                 return null;
             }
         } catch (IOException e) {
-            log.error("NACOS-0001", LoggerHelper.getErrorCodeStr("NACOS", "NACOS-0001", "环境问题", e.toString()));
-            log.error(addressServerUrl, "NACOS-XXXX", "[check-serverlist] exception. msg={}", e.toString(), e);
+            LOGGER.error("[check-serverlist] exception. url: " + url, e);
             return null;
         }
     }
